@@ -42,6 +42,64 @@ bot.command('start', (ctx) => {
   );
 });
 
+bot.action('sit_hired', (ctx) => addSituation(ctx, 'hired_first'));
+bot.action('sit_regime', (ctx) => addSituation(ctx, 'changed_regime'));
+bot.action('sit_transport', (ctx) => addSituation(ctx, 'bought_transport'));
+bot.action('sit_none', (ctx) => {
+  return ctx.reply(
+    'Хорошо! Если что-то изменится — возвращайтесь.\n\n' +
+    'А пока вот что обычно сдают ИП на УСН с сотрудниками:\n' +
+    '• ПСВ — до 25 числа каждого месяца\n' +
+    '• РСВ — до 25 числа после квартала\n' +
+    '• 6-НДФЛ — до 25 числа после квартала\n' +
+    '• ЕФС-1 — при приёме/увольнении\n\n' +
+    'Подробнее: https://мсп.рф/',
+    {
+      attachments: [{
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
+        }
+      }]
+    }
+  );
+});
+
+
+function addSituation(ctx, key) {
+  const userId = ctx.user.id;
+  const situation = SITUATIONS[key];
+  const user = getUser(userId);
+
+  if (!user.situations.includes(key)) {
+    user.situations.push(key);
+    user.reports.push(...situation.reports.map(r => ({ ...r, status: 'not_done' })));
+  }
+
+  let text = `📌 *${situation.title}*\n\n`;
+  text += `*Какие отчёты появились:*\n\n`;
+
+  situation.reports.forEach((r, i) => {
+    text += `${i + 1}. *${r.name}*\n`;
+    text += `${r.deadline}\n`;
+    text += `Что нужно: ${r.documents.join(', ')}\n`;
+    text += `Если не сдать: ${r.penalty}\n\n`;
+  });
+
+  return ctx.reply(text, {
+    parse_mode: 'Markdown',
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: [
+          [{ type: 'callback', text: 'Отметить сдано', payload: 'mark_done' }],
+          [{ type: 'callback', text: 'Настроить напоминание', payload: 'set_reminder' }],
+          [{ type: 'callback', text: 'В меню', payload: 'menu' }]
+        ]
+      }
+    }]
+  });
+}
 
 function showMenu(ctx, userId) {
   return ctx.reply('Вот меню:');
