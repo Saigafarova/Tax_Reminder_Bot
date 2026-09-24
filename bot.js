@@ -102,9 +102,55 @@ function addSituation(ctx, key) {
 }
 
 function showMenu(ctx, userId) {
-  return ctx.reply('Вот меню:');
+  return ctx.reply('Что вам нужно?', {
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: [
+          [{ type: 'callback', text: '📋 Моя отчётность', payload: 'my_reports' }],
+          [{ type: 'callback', text: 'Мои напоминания', payload: 'my_reminders' }],
+          [{ type: 'callback', text: 'Изменить ситуацию', payload: 'change_sit' }]
+        ]
+      }
+    }]
+  });
 }
 
+bot.action('my_reports', (ctx) => {
+  const userId = ctx.user.id;
+  const user = getUser(userId);
+
+  if (!user.reports || user.reports.length === 0) {
+    return ctx.reply('У вас пока нет отчётов. Выберите ситуацию в меню.', {
+      attachments: [{
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
+        }
+      }]
+    });
+  }
+
+  let text = '*Ваши отчёты:*\n\n';
+  user.reports.forEach((r, i) => {
+    const status = r.status === 'done' ? 'сдано' : 'не сдано';
+    text += `${i + 1}. ${r.name} — ${r.deadline} — ${status}\n`;
+  });
+
+  return ctx.reply(text, {
+    parse_mode: 'Markdown',
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: [
+          [{ type: 'callback', text: 'Отметить сдано', payload: 'mark_done' }],
+          [{ type: 'callback', text: 'Настроить напоминание', payload: 'set_reminder' }],
+          [{ type: 'callback', text: 'В меню', payload: 'menu' }]
+        ]
+      }
+    }]
+  });
+});
 
 bot.start();
 console.log('Бот запущен...');
