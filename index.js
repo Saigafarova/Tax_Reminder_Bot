@@ -13,8 +13,11 @@ function getUser(userId) {
   return users[userId];
 }
 
-bot.command('start', (ctx) => {
-  const userId = ctx.user.id;
+// Общая логика старта — вызывается и из /start, и из bot_started
+async function handleStart(ctx) {
+  const userId = ctx.user?.id;
+  if (!userId) return;
+
   const user = getUser(userId);
 
   if (user.situations.length > 0) {
@@ -38,12 +41,15 @@ bot.command('start', (ctx) => {
       }]
     }
   );
-});
+}
 
+bot.command('start', handleStart);
+bot.on('bot_started', handleStart);   // ← ВАЖНО для Max
 
 bot.action('sit_hired', (ctx) => addSituation(ctx, 'hired_first'));
 bot.action('sit_regime', (ctx) => addSituation(ctx, 'changed_regime'));
 bot.action('sit_transport', (ctx) => addSituation(ctx, 'bought_transport'));
+
 bot.action('sit_none', (ctx) => {
   return ctx.reply(
     'Хорошо! Если что-то изменится — возвращайтесь.\n\n' +
@@ -63,7 +69,6 @@ bot.action('sit_none', (ctx) => {
     }
   );
 });
-
 
 function addSituation(ctx, key) {
   const userId = ctx.user.id;
@@ -235,9 +240,9 @@ function askDate(ctx, reportId) {
   const userId = ctx.user.id;
   const user = getUser(userId);
   const report = user.reports.find(r => r.id === reportId);
-  
+
   user.waitingForDate = reportId;
-  
+
   return ctx.reply(
     `${report.name}\n\n` +
     `Срок: ${report.deadline}\n\n` +
@@ -247,24 +252,28 @@ function askDate(ctx, reportId) {
 }
 
 bot.on('message_created', (ctx) => {
-  const userId = ctx.user.id;
+  const userId = ctx.user?.id;
+  if (!userId) return;
+
   const user = getUser(userId);
-  
+
   if (!user.waitingForDate) return;
-  
-  const text = ctx.message.body.text;
+
+  const text = ctx.message?.body?.text;
+  if (!text) return;
+
   const reportId = user.waitingForDate;
-  
+
   const dateRegex = /^(\d{2})\.(\d{2})\.(\d{4})$/;
   const match = text.match(dateRegex);
-  
+
   if (!match) {
     return ctx.reply('Не понял дату. Напишите в формате ДД.ММ.ГГГГ, например: 22.10.2026');
   }
-  
-  const day = parseInt(match[1]);
-  const month = parseInt(match[2]);
-  const year = parseInt(match[3]);
+
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
 
   if (month < 1 || month > 12) {
     return ctx.reply('Неверный месяц. Месяц должен быть от 01 до 12.');
@@ -290,14 +299,13 @@ bot.on('message_created', (ctx) => {
   }
 
   const remindDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  
 
   if (!user.reminders) user.reminders = [];
   user.reminders.push({ reportId, remindDate });
   user.waitingForDate = null;
-  
+
   const report = user.reports.find(r => r.id === reportId);
-  
+
   return ctx.reply(`Сохранено! Напомню ${match[1]}.${match[2]}.${match[3]} по отчёту "${report.name}".`, {
     attachments: [{
       type: 'inline_keyboard',
@@ -307,34 +315,6 @@ bot.on('message_created', (ctx) => {
     }]
   });
 });
-
-
-
-function saveReminder(ctx, reportId, days) {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
-
-  const report = user.reports.find(r => r.id === reportId);
-  if (!report) {
-    return ctx.reply('Не нашёл такой отчёт. Попробуйте снова.');
-  }
-
-  if (!user.reminders) user.reminders = [];
-
-  const isExist = user.reminders.some(r => r.reportId === reportId && r.days === days);
-  if (!isExist) {
-    user.reminders.push({ reportId, days });
-  }
-
-  return ctx.reply(`Сохранено! Напомню за ${days} дн. по отчёту "${report.name}".`, {
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
-      }
-    }]
-  });
-}
 
 bot.action('my_reminders', (ctx) => {
   const userId = ctx.user.id;
@@ -352,29 +332,10 @@ bot.action('my_reminders', (ctx) => {
   }
 
   let text = '*Ваши напоминания:*\n\n';
-user.reminders.forEach((rem, i) => {
-  const report = user.reports.find(r => r.id === rem.reportId);
-  text += `${i + 1}. ${report?.name || 'Отчёт'} — ${rem.remindDate}\n`;
-});
-
-async function checkReminders() {
-  const today = new Date().toISOString().split('T')[0];
-  
-  for (const userId in users) {
-    const user = users[userId];
-    if (!user.reminders) continue;
-    
-    for (const rem of user.reminders) {
-      if (rem.remindDate === today) {
-        const report = user.reports.find(r => r.id === rem.reportId);
-        // отправка сообщения
-        // await bot.api.sendMessage({ user_id: userId, text: `Напоминание: ${report.name}` });
-      }
-    }
-  }
-}
-
-setInterval(checkReminders, 24 * 60 * 60 * 1000);
+  user.reminders.forEach((rem, i) => {
+    const report = user.reports.find(r => r.id === rem.reportId);
+    text += `${i + 1}. ${report?.name || 'Отчёт'} — ${rem.remindDate}\n`;
+  });
 
   return ctx.reply(text, {
     parse_mode: 'Markdown',
@@ -402,13 +363,26 @@ bot.action('change_sit', (ctx) => {
     }]
   });
 });
+
 bot.action('menu', (ctx) => showMenu(ctx, ctx.user.id));
 
-
-
+// Обработчик для Yandex Cloud Functions
 export async function handler(event) {
+  console.log('EVENT:', JSON.stringify(event, null, 2));
+
   try {
-    const body = JSON.parse(event.body);
+    let body = event.body;
+
+    // Yandex Cloud иногда присылает body как строку
+    if (typeof body === 'string') {
+      body = JSON.parse(body);
+    }
+
+    // На случай, если body уже объект или лежит в другом месте
+    if (!body && event) {
+      body = event;
+    }
+
     await bot.handleUpdate(body);
     return { statusCode: 200, body: 'OK' };
   } catch (err) {
