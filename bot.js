@@ -107,7 +107,7 @@ function showMenu(ctx, userId) {
       type: 'inline_keyboard',
       payload: {
         buttons: [
-          [{ type: 'callback', text: '📋 Моя отчётность', payload: 'my_reports' }],
+          [{ type: 'callback', text: 'Моя отчётность', payload: 'my_reports' }],
           [{ type: 'callback', text: 'Мои напоминания', payload: 'my_reminders' }],
           [{ type: 'callback', text: 'Изменить ситуацию', payload: 'change_sit' }]
         ]
@@ -152,5 +152,54 @@ bot.action('my_reports', (ctx) => {
   });
 });
 
+bot.action('mark_done', (ctx) => {
+  const userId = ctx.user.id;
+  const user = getUser(userId);
+
+  if (!user.reports || user.reports.length === 0) {
+    return ctx.reply('У вас нет отчётов для отметки.');
+  }
+
+  return ctx.reply('Какой отчёт сдали?', {
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: user.reports.map((r, i) => [
+          { type: 'callback', text: `${i + 1}. ${r.name}`, payload: `done_${r.id}` }
+        ])
+      }
+    }]
+  });
+});
+
+bot.action('done_psv', (ctx) => markDone(ctx, 'psv'));
+bot.action('done_rsv', (ctx) => markDone(ctx, 'rsv'));
+bot.action('done_ndfl', (ctx) => markDone(ctx, 'ndfl'));
+bot.action('done_efs_kadry', (ctx) => markDone(ctx, 'efs_kadry'));
+bot.action('done_efs_vznosy', (ctx) => markDone(ctx, 'efs_vznosy'));
+bot.action('done_usn_notification', (ctx) => markDone(ctx, 'usn_notification'));
+bot.action('done_usn_declaration', (ctx) => markDone(ctx, 'usn_declaration'));
+bot.action('done_usn_advances', (ctx) => markDone(ctx, 'usn_advances'));
+bot.action('done_transport_tax_ip', (ctx) => markDone(ctx, 'transport_tax_ip'));
+
+function markDone(ctx, reportId) {
+  const userId = ctx.user.id;
+  const user = getUser(userId);
+  const report = user.reports.find(r => r.id === reportId);
+
+  if (!report) {
+    return ctx.reply('Не нашёл такой отчёт.');
+  }
+
+  report.status = 'done';
+  return ctx.reply(`Записал: ${report.name} сдан.`, {
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
+      }
+    }]
+  });
+}
 bot.start();
 console.log('Бот запущен...');
