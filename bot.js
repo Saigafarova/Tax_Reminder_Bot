@@ -251,7 +251,6 @@ bot.on('message_created', (ctx) => {
   const userId = ctx.user.id;
   const user = getUser(userId);
   
- 
   if (!user.waitingForDate) return;
   
   const text = ctx.message.body.text;
@@ -264,20 +263,43 @@ bot.on('message_created', (ctx) => {
     return ctx.reply('Не понял дату. Напишите в формате ДД.ММ.ГГГГ, например: 22.10.2026');
   }
   
-  const day = match[1];
-  const month = match[2];
-  const year = match[3];
-  const remindDate = `${year}-${month}-${day}`;
-  
-  if (!user.reminders) user.reminders = [];
-  user.reminders.push({ reportId, remindDate });
+  const day = parseInt(match[1]);
+  const month = parseInt(match[2]);
+  const year = parseInt(match[3]);
+
+  if (month < 1 || month > 12) {
+    return ctx.reply('Неверный месяц. Месяц должен быть от 01 до 12.');
+  }
+
+  if (day < 1 || day > 31) {
+    return ctx.reply('Неверный день. День должен быть от 01 до 31.');
+  }
+
+  const testDate = new Date(year, month - 1, day);
+  if (
+    testDate.getFullYear() !== year ||
+    testDate.getMonth() !== month - 1 ||
+    testDate.getDate() !== day
+  ) {
+    return ctx.reply('Такой даты не существует. Проверьте, пожалуйста.');
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (testDate < today) {
+    return ctx.reply('Дата уже прошла. Укажите будущую дату.');
+  }
+
+  const remindDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   
 
+  if (!user.reminders) user.reminders = [];
+  user.reminders.push({ reportId, remindDate });
   user.waitingForDate = null;
   
   const report = user.reports.find(r => r.id === reportId);
   
-  return ctx.reply(`Сохранено! Напомню ${day}.${month}.${year} по отчёту "${report.name}".`, {
+  return ctx.reply(`Сохранено! Напомню ${match[1]}.${match[2]}.${match[3]} по отчёту "${report.name}".`, {
     attachments: [{
       type: 'inline_keyboard',
       payload: {
