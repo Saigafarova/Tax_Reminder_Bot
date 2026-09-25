@@ -15,7 +15,7 @@ function getUser(userId) {
 
 // Общая логика старта — вызывается и из /start, и из bot_started
 async function handleStart(ctx) {
-  const userId = ctx.user?.id;
+  const userId = ctx.user?.user_id;
   if (!userId) return;
 
   const user = getUser(userId);
@@ -71,7 +71,7 @@ bot.action('sit_none', (ctx) => {
 });
 
 function addSituation(ctx, key) {
-  const userId = ctx.user.id;
+  const userId = ctx.user.user_id;
   const situation = SITUATIONS[key];
   const user = getUser(userId);
 
@@ -121,7 +121,7 @@ function showMenu(ctx, userId) {
 }
 
 bot.action('my_reports', (ctx) => {
-  const userId = ctx.user.id;
+  const userId = ctx.user.user_id;
   const user = getUser(userId);
 
   if (!user.reports || user.reports.length === 0) {
@@ -157,7 +157,7 @@ bot.action('my_reports', (ctx) => {
 });
 
 bot.action('mark_done', (ctx) => {
-  const userId = ctx.user.id;
+  const userId = ctx.user.user_id;
   const user = getUser(userId);
 
   if (!user.reports || user.reports.length === 0) {
@@ -187,7 +187,7 @@ bot.action('done_usn_advances', (ctx) => markDone(ctx, 'usn_advances'));
 bot.action('done_transport_tax_ip', (ctx) => markDone(ctx, 'transport_tax_ip'));
 
 function markDone(ctx, reportId) {
-  const userId = ctx.user.id;
+  const userId = ctx.user.user_id;
   const user = getUser(userId);
   const report = user.reports.find(r => r.id === reportId);
 
@@ -207,7 +207,7 @@ function markDone(ctx, reportId) {
 }
 
 bot.action('set_reminder', (ctx) => {
-  const userId = ctx.user.id;
+  const userId = ctx.user.user_id;
   const user = getUser(userId);
 
   if (!user.reports || user.reports.length === 0) {
@@ -237,7 +237,7 @@ bot.action('rem_usn_advances', (ctx) => askDate(ctx, 'usn_advances'));
 bot.action('rem_transport_tax_ip', (ctx) => askDate(ctx, 'transport_tax_ip'));
 
 function askDate(ctx, reportId) {
-  const userId = ctx.user.id;
+  const userId = ctx.user.user_id;
   const user = getUser(userId);
   const report = user.reports.find(r => r.id === reportId);
 
@@ -252,7 +252,7 @@ function askDate(ctx, reportId) {
 }
 
 bot.on('message_created', (ctx) => {
-  const userId = ctx.user?.id;
+  const userId = ctx.user?.user_id;
   if (!userId) return;
 
   const user = getUser(userId);
@@ -317,7 +317,7 @@ bot.on('message_created', (ctx) => {
 });
 
 bot.action('my_reminders', (ctx) => {
-  const userId = ctx.user.id;
+  const userId = ctx.user.user_id;
   const user = getUser(userId);
 
   if (!user.reminders || user.reminders.length === 0) {
@@ -364,29 +364,25 @@ bot.action('change_sit', (ctx) => {
   });
 });
 
-bot.action('menu', (ctx) => showMenu(ctx, ctx.user.id));
+bot.action('menu', (ctx) => showMenu(ctx, ctx.user.user_id));
 
-// Обработчик для Yandex Cloud Functions
+
 export async function handler(event) {
   console.log('EVENT:', JSON.stringify(event, null, 2));
 
   try {
     let body = event.body;
-
-    // Yandex Cloud иногда присылает body как строку
     if (typeof body === 'string') {
       body = JSON.parse(body);
     }
+    if (!body) body = event;
 
-    // На случай, если body уже объект или лежит в другом месте
-    if (!body && event) {
-      body = event;
-    }
-
+    console.log('Update type:', body.update_type);
     await bot.handleUpdate(body);
+    console.log('handleUpdate finished OK');
     return { statusCode: 200, body: 'OK' };
   } catch (err) {
-    console.error('Error:', err);
+    console.error('Error in handler:', err);
     return { statusCode: 200, body: 'OK' };
   }
 }
