@@ -1,4 +1,4 @@
-import 'dotenv/config';
+даimport 'dotenv/config';
 import { Bot } from '@maxhub/max-bot-api';
 import { SITUATIONS } from './data.js';
 
@@ -311,6 +311,54 @@ function saveReminder(ctx, reportId, days) {
     }]
   });
 }
+
+bot.action('my_reminders', (ctx) => {
+  const userId = ctx.user.id;
+  const user = getUser(userId);
+
+  if (!user.reminders || user.reminders.length === 0) {
+    return ctx.reply('У вас пока нет напоминаний.', {
+      attachments: [{
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
+        }
+      }]
+    });
+  }
+
+  let text = '*Ваши напоминания:*\n\n';
+  user.reminders.forEach((rem, i) => {
+    const report = user.reports.find(r => r.id === rem.reportId);
+    text += `${i + 1}. ${report?.name || 'Отчёт'} — за ${rem.days} дн.\n`;
+  });
+
+  return ctx.reply(text, {
+    parse_mode: 'Markdown',
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
+      }
+    }]
+  });
+});
+
+bot.action('change_sit', (ctx) => {
+  return ctx.reply('Что у вас изменилось?', {
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: [
+          [{ type: 'callback', text: 'Нанял сотрудника', payload: 'sit_hired' }],
+          [{ type: 'callback', text: 'Сменил режим', payload: 'sit_regime' }],
+          [{ type: 'callback', text: 'Купил транспорт', payload: 'sit_transport' }],
+          [{ type: 'callback', text: 'В меню', payload: 'menu' }]
+        ]
+      }
+    }]
+  });
+});
 
 bot.start();
 console.log('Бот запущен...');
