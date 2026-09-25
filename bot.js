@@ -1,4 +1,4 @@
-даimport 'dotenv/config';
+import 'dotenv/config';
 import { Bot } from '@maxhub/max-bot-api';
 import { SITUATIONS } from './data.js';
 
@@ -359,6 +359,6 @@ bot.action('change_sit', (ctx) => {
     }]
   });
 });
-
+bot.action('menu', (ctx) => showMenu(ctx, ctx.user.id));
 bot.start();
 console.log('Бот запущен...');
