@@ -331,10 +331,29 @@ bot.action('my_reminders', (ctx) => {
   }
 
   let text = '*Ваши напоминания:*\n\n';
-  user.reminders.forEach((rem, i) => {
-    const report = user.reports.find(r => r.id === rem.reportId);
-    text += `${i + 1}. ${report?.name || 'Отчёт'} — за ${rem.days} дн.\n`;
-  });
+user.reminders.forEach((rem, i) => {
+  const report = user.reports.find(r => r.id === rem.reportId);
+  text += `${i + 1}. ${report?.name || 'Отчёт'} — ${rem.remindDate}\n`;
+});
+
+async function checkReminders() {
+  const today = new Date().toISOString().split('T')[0];
+  
+  for (const userId in users) {
+    const user = users[userId];
+    if (!user.reminders) continue;
+    
+    for (const rem of user.reminders) {
+      if (rem.remindDate === today) {
+        const report = user.reports.find(r => r.id === rem.reportId);
+        // отправка сообщения
+        // await bot.api.sendMessage({ user_id: userId, text: `Напоминание: ${report.name}` });
+      }
+    }
+  }
+}
+
+setInterval(checkReminders, 24 * 60 * 60 * 1000);
 
   return ctx.reply(text, {
     parse_mode: 'Markdown',
