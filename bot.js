@@ -201,5 +201,116 @@ function markDone(ctx, reportId) {
     }]
   });
 }
+
+bot.action('set_reminder', (ctx) => {
+  const userId = ctx.user.id;
+  const user = getUser(userId);
+
+  if (!user.reports || user.reports.length === 0) {
+    return ctx.reply('У вас нет отчётов для напоминания.');
+  }
+
+  return ctx.reply('По какому отчёту напомнить?', {
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: user.reports.map((r, i) => [
+          { type: 'callback', text: `${i + 1}. ${r.name}`, payload: `rem_${r.id}` }
+        ])
+      }
+    }]
+  });
+});
+
+bot.action('rem_psv', (ctx) => askDays(ctx, 'psv'));
+bot.action('rem_rsv', (ctx) => askDays(ctx, 'rsv'));
+bot.action('rem_ndfl', (ctx) => askDays(ctx, 'ndfl'));
+bot.action('rem_efs_kadry', (ctx) => askDays(ctx, 'efs_kadry'));
+bot.action('rem_efs_vznosy', (ctx) => askDays(ctx, 'efs_vznosy'));
+bot.action('rem_usn_notification', (ctx) => askDays(ctx, 'usn_notification'));
+bot.action('rem_usn_declaration', (ctx) => askDays(ctx, 'usn_declaration'));
+bot.action('rem_usn_advances', (ctx) => askDays(ctx, 'usn_advances'));
+bot.action('rem_transport_tax_ip', (ctx) => askDays(ctx, 'transport_tax_ip'));
+
+function askDays(ctx, reportId) {
+  return ctx.reply('За сколько дней до дедлайна напомнить?', {
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: [
+          [
+            { type: 'callback', text: 'За 1 день', payload: `rem_set_${reportId}_1` },
+            { type: 'callback', text: 'За 3 дня', payload: `rem_set_${reportId}_3` },
+            { type: 'callback', text: 'За 5 дней', payload: `rem_set_${reportId}_5` }
+          ],
+          [{ type: 'callback', text: 'В меню', payload: 'menu' }]
+        ]
+      }
+    }]
+  });
+}
+
+bot.action('rem_set_psv_1', (ctx) => saveReminder(ctx, 'psv', 1));
+bot.action('rem_set_psv_3', (ctx) => saveReminder(ctx, 'psv', 3));
+bot.action('rem_set_psv_5', (ctx) => saveReminder(ctx, 'psv', 5));
+
+bot.action('rem_set_rsv_1', (ctx) => saveReminder(ctx, 'rsv', 1));
+bot.action('rem_set_rsv_3', (ctx) => saveReminder(ctx, 'rsv', 3));
+bot.action('rem_set_rsv_5', (ctx) => saveReminder(ctx, 'rsv', 5));
+
+bot.action('rem_set_ndfl_1', (ctx) => saveReminder(ctx, 'ndfl', 1));
+bot.action('rem_set_ndfl_3', (ctx) => saveReminder(ctx, 'ndfl', 3));
+bot.action('rem_set_ndfl_5', (ctx) => saveReminder(ctx, 'ndfl', 5));
+
+bot.action('rem_set_efs_kadry_1', (ctx) => saveReminder(ctx, 'efs_kadry', 1));
+bot.action('rem_set_efs_kadry_3', (ctx) => saveReminder(ctx, 'efs_kadry', 3));
+bot.action('rem_set_efs_kadry_5', (ctx) => saveReminder(ctx, 'efs_kadry', 5));
+
+bot.action('rem_set_efs_vznosy_1', (ctx) => saveReminder(ctx, 'efs_vznosy', 1));
+bot.action('rem_set_efs_vznosy_3', (ctx) => saveReminder(ctx, 'efs_vznosy', 3));
+bot.action('rem_set_efs_vznosy_5', (ctx) => saveReminder(ctx, 'efs_vznosy', 5));
+
+bot.action('rem_set_usn_notification_1', (ctx) => saveReminder(ctx, 'usn_notification', 1));
+bot.action('rem_set_usn_notification_3', (ctx) => saveReminder(ctx, 'usn_notification', 3));
+bot.action('rem_set_usn_notification_5', (ctx) => saveReminder(ctx, 'usn_notification', 5));
+
+bot.action('rem_set_usn_declaration_1', (ctx) => saveReminder(ctx, 'usn_declaration', 1));
+bot.action('rem_set_usn_declaration_3', (ctx) => saveReminder(ctx, 'usn_declaration', 3));
+bot.action('rem_set_usn_declaration_5', (ctx) => saveReminder(ctx, 'usn_declaration', 5));
+
+bot.action('rem_set_usn_advances_1', (ctx) => saveReminder(ctx, 'usn_advances', 1));
+bot.action('rem_set_usn_advances_3', (ctx) => saveReminder(ctx, 'usn_advances', 3));
+bot.action('rem_set_usn_advances_5', (ctx) => saveReminder(ctx, 'usn_advances', 5));
+
+bot.action('rem_set_transport_tax_ip_1', (ctx) => saveReminder(ctx, 'transport_tax_ip', 1));
+bot.action('rem_set_transport_tax_ip_3', (ctx) => saveReminder(ctx, 'transport_tax_ip', 3));
+bot.action('rem_set_transport_tax_ip_5', (ctx) => saveReminder(ctx, 'transport_tax_ip', 5));
+
+function saveReminder(ctx, reportId, days) {
+  const userId = ctx.user.id;
+  const user = getUser(userId);
+
+  const report = user.reports.find(r => r.id === reportId);
+  if (!report) {
+    return ctx.reply('Не нашёл такой отчёт. Попробуйте снова.');
+  }
+
+  if (!user.reminders) user.reminders = [];
+
+  const isExist = user.reminders.some(r => r.reportId === reportId && r.days === days);
+  if (!isExist) {
+    user.reminders.push({ reportId, days });
+  }
+
+  return ctx.reply(`Сохранено! Напомню за ${days} дн. по отчёту "${report.name}".`, {
+    attachments: [{
+      type: 'inline_keyboard',
+      payload: {
+        buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
+      }
+    }]
+  });
+}
+
 bot.start();
 console.log('Бот запущен...');
