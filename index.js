@@ -69,35 +69,12 @@ async function handleStart(ctx) {
     console.log('No user_id', ctx.update);
     return;
   }
-
   const users = await loadUsers();
   const user = ensureUser(users, userId);
-
-  if (user.situations.length > 0) {
-    return showMenu(ctx);
-  }
-
-  return ctx.reply(
-    'Привет! Я помогаю ИП с сотрудниками на УСН с отчётностью. \n Сроки и штрафы — типовые ориентиры. Перед сдачей сверьте в ЛК ФНС/СФР или с бухгалтером.\n\n' +
-      'Что у вас изменилось?',
-    {
-      attachments: [
-        {
-          type: 'inline_keyboard',
-          payload: {
-            buttons: [
-              [{ type: 'callback', text: 'Нанял сотрудника', payload: 'sit_hired' }],
-              [{ type: 'callback', text: 'Сменил режим', payload: 'sit_regime' }],
-              [{ type: 'callback', text: 'Купил транспорт', payload: 'sit_transport' }],
-              [{ type: 'callback', text: 'Ничего, проверить', payload: 'sit_none' }],
-            ],
-          },
-        },
-      ],
-    }
-  );
-}
-
+  if (user.situations && user.situations.length > 0) {
+    return showMainMenu(ctx);}
+    
+  return showCategories(ctx);}
 bot.command('start', handleStart);
 bot.on('bot_started', handleStart);
 
