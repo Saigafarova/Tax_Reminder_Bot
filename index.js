@@ -170,6 +170,28 @@ function showMainMenu(ctx) {
   });
 }
 
+bot.action('choose_category', (ctx) => showCategories(ctx));
+bot.action('menu', (ctx) => showMainMenu(ctx));
+
+bot.action('cat_hiring_and_onboarding', (ctx) =>
+  showSituations(ctx, 'hiring_and_onboarding')
+);
+bot.action('cat_regular_taxes_and_payments', (ctx) =>
+  showSituations(ctx, 'regular_taxes_and_payments')
+);
+bot.action('cat_social_cases_and_annuals', (ctx) =>
+  showSituations(ctx, 'social_cases_and_annuals')
+);
+bot.action('cat_offboarding_and_special', (ctx) =>
+  showSituations(ctx, 'offboarding_and_special')
+);
+
+for (const id of Object.keys(SITUATIONS)) {
+  bot.action(`sit_${id}`, (ctx) => addSituation(ctx, id));
+}
+
+
+
 bot.action('my_reports', async (ctx) => {
   const userId = String(ctx.user.user_id);
   const users = await loadUsers();
