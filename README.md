@@ -1,4 +1,4 @@
-# Tax Reminder Bot — Навигатор по изменениям для ИП
+  # Tax Reminder Bot — Навигатор по изменениям для ИП
 
 Чат-бот в MAX, который помогает ИП на УСН с сотрудниками разобраться, какие новые отчёты появились после изменений в бизнесе (найм сотрудника, смена режима, покупка транспорта).
 
@@ -57,6 +57,59 @@ ProjectBot/
 - data.js — статическая база знаний (подготовленные данные).
 - Yandex Object Storage — хранение данных пользователей.
 - Yandex Cloud Functions — среда выполнения 24/7.
+
+### Логика работы бота
+
+```mermaid
+flowchart TD
+    Start([/start или bot_started]) --> LoadUsers[Загрузить users.json из S3]
+    LoadUsers --> CheckProfile{Есть ситуации?}
+    
+    CheckProfile -->|Да| MainMenu[Главное меню]
+    CheckProfile -->|Нет| ShowCategories[Показать 4 категории]
+    
+    ShowCategories --> CategoryChoice{Выбор категории}
+    CategoryChoice -->|cat_1| ShowSit1[Ситуации категории 1]
+    CategoryChoice -->|cat_2| ShowSit2[Ситуации категории 2]
+    CategoryChoice -->|cat_3| ShowSit3[Ситуации категории 3]
+    CategoryChoice -->|cat_4| ShowSit4[Ситуации категории 4]
+    
+    ShowSit1 --> SitChoice{Выбор ситуации}
+    ShowSit2 --> SitChoice
+    ShowSit3 --> SitChoice
+    ShowSit4 --> SitChoice
+    
+    SitChoice --> AddSituation[addSituation]
+    AddSituation --> SaveReports[Сохранить отчёты в профиль]
+    SaveReports --> ShowReports[Показать список отчётов]
+    
+    ShowReports --> ActionChoice{Что дальше?}
+    ActionChoice -->|mark_done| MarkDone[Отметить сдано]
+    ActionChoice -->|set_reminder| SetReminder[Настроить напоминание]
+    ActionChoice -->|menu| MainMenu
+    
+    MarkDone --> ChooseReport[Выбрать отчёт]
+    ChooseReport --> SaveStatus[Сохранить статус = done]
+    SaveStatus --> MainMenu
+    
+    SetReminder --> ChooseReportRem[Выбрать отчёт]
+    ChooseReportRem --> AskDate[Спросить дату ДД.ММ.ГГГГ]
+    AskDate --> UserInput[Пользователь вводит дату]
+    UserInput --> ValidateDate{Валидация}
+    ValidateDate -->|Ошибка| AskDate
+    ValidateDate -->|OK| SaveReminder[Сохранить remindDate в reminders]
+    SaveReminder --> MainMenu
+    
+    MainMenu --> MenuChoice{Что нужно?}
+    MenuChoice -->|choose_category| ShowCategories
+    MenuChoice -->|my_reports| MyReports[Моя отчётность]
+    MenuChoice -->|my_reminders| MyReminders[Мои напоминания]
+    MenuChoice -->|reset_profile| Reset[Сбросить профиль]
+    
+    MyReports --> MainMenu
+    MyReminders --> MainMenu
+    Reset --> ShowCategories
+```
 
 ## Запуск через Docker
 
