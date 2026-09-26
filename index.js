@@ -63,6 +63,73 @@ function ensureUser(users, userId) {
 }
 
 // ——— Старт ———
+function showCategories(ctx) {
+  return ctx.reply(
+    'Выберите раздел:\n\n' +
+      'Сроки и штрафы — типовые ориентиры. Перед сдачей сверьте в ЛК ФНС/СФР или с бухгалтером.',
+    {
+      attachments: [
+        {
+          type: 'inline_keyboard',
+          payload: {
+            buttons: [
+              ...CATEGORIES.map((c) => [
+                { type: 'callback', text: c.title, payload: `cat_${c.id}` },
+              ]),
+              [{ type: 'callback', text: 'Моя отчётность', payload: 'my_reports' }],
+              [{ type: 'callback', text: 'Мои напоминания', payload: 'my_reminders' }],
+            ],
+          },
+        },
+      ],
+    }
+  );
+}
+
+function showSituations(ctx, categoryId) {
+  const category = CATEGORIES.find((c) => c.id === categoryId);
+  const list = Object.entries(SITUATIONS).filter(
+    ([, s]) => s.categoryId === categoryId
+  );
+
+  if (list.length === 0) {
+    return ctx.reply('В этом разделе пока нет ситуаций.', {
+      attachments: [
+        {
+          type: 'inline_keyboard',
+          payload: {
+            buttons: [
+              [{ type: 'callback', text: '« К разделам', payload: 'choose_category' }],
+            ],
+          },
+        },
+      ],
+    });
+  }
+
+  const title = category ? category.title : 'Ситуации';
+
+  return ctx.reply(`Раздел: ${title}\n\nЧто у вас произошло?`, {
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [
+            ...list.map(([id, s]) => [
+              {
+                type: 'callback',
+                text: s.title.length > 60 ? s.title.slice(0, 57) + '...' : s.title,
+                payload: `sit_${id}`,
+              },
+            ]),
+            [{ type: 'callback', text: '« К разделам', payload: 'choose_category' }],
+          ],
+        },
+      },
+    ],
+  });
+}
+
 async function handleStart(ctx) {
   const userId = String(ctx.user?.user_id);
   if (!userId || userId === 'undefined') {
@@ -79,35 +146,22 @@ bot.command('start', handleStart);
 bot.on('bot_started', handleStart);
 
 // ——— Ситуации ———
-bot.action('sit_hired', (ctx) => addSituation(ctx, 'hired_first'));
-bot.action('sit_regime', (ctx) => addSituation(ctx, 'changed_regime'));
-bot.action('sit_transport', (ctx) => addSituation(ctx, 'bought_transport'));
 
-bot.action('sit_none', (ctx) => {
-  return ctx.reply(
-    'Хорошо! Если что-то изменится — возвращайтесь.\n\n' +
-      'А пока вот что обычно сдают ИП на УСН с сотрудниками:\n' +
-      '• ПСВ — до 25 числа каждого месяца\n' +
-      '• РСВ — до 25 числа после квартала\n' +
-      '• 6-НДФЛ — до 25 числа после квартала\n' +
-      '• ЕФС-1 — при приёме/увольнении\n\n' +
-      'Подробнее: https://мсп.рф/',
-    {
-      attachments: [
-        {
-          type: 'inline_keyboard',
-          payload: {
-            buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]],
-          },
-        },
-      ],
-    }
-  );
-});
 
 async function addSituation(ctx, key) {
-  const userId = String(ctx.user.user_id);
   const situation = SITUATIONS[key];
+  if (!situation) {
+    return ctx.reply('Ситуация не найдена. Выберите раздел заново.', {
+      attachments: [{
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [[{ type: 'callback', text: 'К разделам', payload: 'choose_category' }]],
+        },
+      }],
+    });
+  }
+
+  const userId = String(ctx.user.user_id);
   const users = await loadUsers();
   const user = ensureUser(users, userId);
 
@@ -137,13 +191,7 @@ async function addSituation(ctx, key) {
         payload: {
           buttons: [
             [{ type: 'callback', text: 'Отметить сдано', payload: 'mark_done' }],
-            [
-              {
-                type: 'callback',
-                text: 'Настроить напоминание',
-                payload: 'set_reminder',
-              },
-            ],
+            [{ type: 'callback', text: 'Настроить напоминание', payload: 'set_reminder' }],
             [{ type: 'callback', text: 'В меню', payload: 'menu' }],
           ],
         },
@@ -192,7 +240,6 @@ bot.action('reset_profile', async (ctx) => {
 });
 
 bot.action('choose_category', (ctx) => showCategories(ctx));
-bot.action('menu', (ctx) => showMainMenu(ctx));
 
 bot.action('cat_hiring_and_onboarding', (ctx) =>
   showSituations(ctx, 'hiring_and_onboarding')
@@ -287,15 +334,6 @@ bot.action('mark_done', async (ctx) => {
   });
 });
 
-bot.action('done_psv', (ctx) => markDone(ctx, 'psv'));
-bot.action('done_rsv', (ctx) => markDone(ctx, 'rsv'));
-bot.action('done_ndfl', (ctx) => markDone(ctx, 'ndfl'));
-bot.action('done_efs_kadry', (ctx) => markDone(ctx, 'efs_kadry'));
-bot.action('done_efs_vznosy', (ctx) => markDone(ctx, 'efs_vznosy'));
-bot.action('done_usn_notification', (ctx) => markDone(ctx, 'usn_notification'));
-bot.action('done_usn_declaration', (ctx) => markDone(ctx, 'usn_declaration'));
-bot.action('done_usn_advances', (ctx) => markDone(ctx, 'usn_advances'));
-bot.action('done_transport_tax_ip', (ctx) => markDone(ctx, 'transport_tax_ip'));
 
 async function markDone(ctx, reportId) {
   const userId = String(ctx.user.user_id);
@@ -358,16 +396,16 @@ bot.action('set_reminder', async (ctx) => {
   });
 });
 
-bot.action('rem_psv', (ctx) => askDate(ctx, 'psv'));
-bot.action('rem_rsv', (ctx) => askDate(ctx, 'rsv'));
-bot.action('rem_ndfl', (ctx) => askDate(ctx, 'ndfl'));
-bot.action('rem_efs_kadry', (ctx) => askDate(ctx, 'efs_kadry'));
-bot.action('rem_efs_vznosy', (ctx) => askDate(ctx, 'efs_vznosy'));
-bot.action('rem_usn_notification', (ctx) => askDate(ctx, 'usn_notification'));
-bot.action('rem_usn_declaration', (ctx) => askDate(ctx, 'usn_declaration'));
-bot.action('rem_usn_advances', (ctx) => askDate(ctx, 'usn_advances'));
-bot.action('rem_transport_tax_ip', (ctx) => askDate(ctx, 'transport_tax_ip'));
+const allReportIds = [
+  ...new Set(
+    Object.values(SITUATIONS).flatMap((s) => s.reports.map((r) => r.id))
+  ),
+];
 
+for (const reportId of allReportIds) {
+  bot.action(`done_${reportId}`, (ctx) => markDone(ctx, reportId));
+  bot.action(`rem_${reportId}`, (ctx) => askDate(ctx, reportId));
+} 
 async function askDate(ctx, reportId) {
   const userId = String(ctx.user.user_id);
   const users = await loadUsers();
@@ -401,7 +439,6 @@ bot.on('message_created', async (ctx) => {
   const text = ctx.message?.body?.text;
   if (!text) return;
 
-  // Не перехватываем команды
   if (text.startsWith('/')) return;
 
   const reportId = user.waitingForDate;
@@ -501,25 +538,9 @@ bot.action('my_reminders', async (ctx) => {
   });
 });
 
-bot.action('change_sit', (ctx) => {
-  return ctx.reply('Что у вас изменилось?', {
-    attachments: [
-      {
-        type: 'inline_keyboard',
-        payload: {
-          buttons: [
-            [{ type: 'callback', text: 'Нанял сотрудника', payload: 'sit_hired' }],
-            [{ type: 'callback', text: 'Сменил режим', payload: 'sit_regime' }],
-            [{ type: 'callback', text: 'Купил транспорт', payload: 'sit_transport' }],
-            [{ type: 'callback', text: 'В меню', payload: 'menu' }],
-          ],
-        },
-      },
-    ],
-  });
-});
+bot.action('change_sit', (ctx) => showCategories(ctx));
 
-bot.action('menu', (ctx) => showMenu(ctx));
+bot.action('menu', (ctx) => showMainMenu(ctx));
 
 // ——— Handler для Cloud Functions ———
 export async function handler(event) {
