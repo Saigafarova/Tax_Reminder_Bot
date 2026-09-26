@@ -170,6 +170,27 @@ function showMainMenu(ctx) {
   });
 }
 
+
+bot.action('reset_profile', async (ctx) => {
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  users[userId] = { situations: [], reports: [], reminders: [] };
+  await saveUsers(users);
+
+  return ctx.reply('Данные сброшены. Можно начать заново.', {
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [
+            [{ type: 'callback', text: 'Выбрать раздел', payload: 'choose_category' }],
+          ],
+        },
+      },
+    ],
+  });
+});
+
 bot.action('choose_category', (ctx) => showCategories(ctx));
 bot.action('menu', (ctx) => showMainMenu(ctx));
 
