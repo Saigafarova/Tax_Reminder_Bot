@@ -58,7 +58,10 @@ ProjectBot/
 - Yandex Object Storage — хранение данных пользователей.
 - Yandex Cloud Functions — среда выполнения 24/7.
 
+
 ### Логика работы бота
+
+Схема показывает полный путь пользователя: от `/start` до настройки напоминаний.
 
 ```mermaid
 flowchart TD
@@ -97,7 +100,7 @@ flowchart TD
     AskDate --> UserInput[Пользователь вводит дату]
     UserInput --> ValidateDate{Валидация}
     ValidateDate -->|Ошибка| AskDate
-    ValidateDate -->|OK| SaveReminder[Сохранить remindDate в reminders]
+    ValidateDate -->|OK| SaveReminder[Сохранить remindDate]
     SaveReminder --> MainMenu
     
     MainMenu --> MenuChoice{Что нужно?}
