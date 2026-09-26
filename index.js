@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Bot } from '@maxhub/max-bot-api';
-import { SITUATIONS } from './data.js';
+import { CATEGORIES, SITUATIONS } from './data.js';
 import {
   S3Client,
   GetObjectCommand,
@@ -78,7 +78,7 @@ async function handleStart(ctx) {
   }
 
   return ctx.reply(
-    'Привет! Я помогаю ИП с сотрудниками на УСН с отчётностью.\n\n' +
+    'Привет! Я помогаю ИП с сотрудниками на УСН с отчётностью. \n Сроки и штрафы — типовые ориентиры. Перед сдачей сверьте в ЛК ФНС/СФР или с бухгалтером.\n\n' +
       'Что у вас изменилось?',
     {
       attachments: [
