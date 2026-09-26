@@ -73,7 +73,7 @@ async function handleStart(ctx) {
   const user = ensureUser(users, userId);
   if (user.situations && user.situations.length > 0) {
     return showMainMenu(ctx);}
-    
+
   return showCategories(ctx);}
 bot.command('start', handleStart);
 bot.on('bot_started', handleStart);
@@ -152,28 +152,17 @@ async function addSituation(ctx, key) {
   });
 }
 
-function showMenu(ctx) {
+function showMainMenu(ctx) {
   return ctx.reply('Что вам нужно?', {
     attachments: [
       {
         type: 'inline_keyboard',
         payload: {
           buttons: [
+            [{ type: 'callback', text: 'Добавить ситуацию', payload: 'choose_category' }],
             [{ type: 'callback', text: 'Моя отчётность', payload: 'my_reports' }],
-            [
-              {
-                type: 'callback',
-                text: 'Мои напоминания',
-                payload: 'my_reminders',
-              },
-            ],
-            [
-              {
-                type: 'callback',
-                text: 'Изменить ситуацию',
-                payload: 'change_sit',
-              },
-            ],
+            [{ type: 'callback', text: 'Мои напоминания', payload: 'my_reminders' }],
+            [{ type: 'callback', text: 'Сбросить данные', payload: 'reset_profile' }],
           ],
         },
       },
