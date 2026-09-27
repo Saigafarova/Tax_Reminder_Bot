@@ -8,4 +8,4 @@ RUN npm install --production
 
 COPY . .
 
-CMD ["node", "bot.js"]
+CMD ["node", "index.js"]
