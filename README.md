@@ -93,7 +93,7 @@ Timer (cron) --> Cloud Function (reminders) --> sendMessageToUser
 
 ---
 
-## Логика диалога (для блок-схемы)
+## Логика диалога 
 
 ```mermaid
 flowchart TD
@@ -174,12 +174,24 @@ flowchart LR
 
 ---
 
+---
+
 ## Запуск через Docker
 
-Для **локальной разработки** и **проверки** решение можно запустить через Docker.
+Docker-конфигурация позволяет запустить бота **локально** для проверки и разработки.
 
-### Dockerfile
+> **Важно:** основной бот работает через **Yandex Cloud Functions** (webhook + timer). Docker — **альтернативный вариант** для локального тестирования.
 
+### Требования
+
+- **Docker** (версия 20+).
+- **Docker Compose** (версия 2+).
+- **Токен бота** от MAX.
+- **Ключи Object Storage** (для работы с `users.json`).
+
+### Файлы
+
+**`Dockerfile`:**
 ```dockerfile
 FROM node:20-alpine
 
@@ -191,11 +203,12 @@ RUN npm install --production
 
 COPY . .
 
-CMD ["node", "index.js"]
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+
+CMD ["node", "bot.js"]
 ```
 
-### docker-compose.yml
-
+**`docker-compose.yml`:**
 ```yaml
 version: '3.8'
 
@@ -206,21 +219,20 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    network_mode: host
 ```
 
-### .dockerignore
-
+**`.dockerignore`:**
 ```
 node_modules
-.env
 .git
 .gitignore
 README.md
 *.md
+*.zip
 ```
 
-### .env.example
-
+**`.env.example`:**
 ```
 BOT_TOKEN=your_token_here
 S3_BUCKET=your_bucket_name
@@ -228,19 +240,69 @@ S3_ACCESS_KEY_ID=your_access_key
 S3_SECRET_ACCESS_KEY=your_secret_key
 S3_ENDPOINT=https://storage.yandexcloud.net
 S3_REGION=ru-central1
+NODE_TLS_REJECT_UNAUTHORIZED=0
 ```
 
-### Одна команда для запуска
+### Подготовка
 
-Перед запуском создай файл `.env` в корне проекта (на основе `.env.example`) с реальными значениями.
+1. **Создай `.env`** в корне проекта на основе `.env.example`:
 
-Затем выполни:
+```bash
+cp .env.example .env
+```
+
+2. **Заполни `.env`** реальными значениями:
+
+```
+BOT_TOKEN=твой_токен_от_MAX
+S3_BUCKET=имя_бакета
+S3_ACCESS_KEY_ID=ключ_доступа
+S3_SECRET_ACCESS_KEY=секретный_ключ
+S3_ENDPOINT=https://storage.yandexcloud.net
+S3_REGION=ru-central1
+NODE_TLS_REJECT_UNAUTHORIZED=0
+```
+
+> **Важно:** `NODE_TLS_REJECT_UNAUTHORIZED=0` нужен, потому что MAX использует сертификаты Минцифры, которых нет в стандартном хранилище Node.js. Для production нужно установить сертификаты Минцифры.
+
+### Запуск
+
+**Одна команда:**
 
 ```bash
 docker-compose up --build
 ```
 
-После запуска основной пользовательский сценарий доступен в MAX.
+**Что произойдёт:**
+1. Docker соберёт образ на основе `Dockerfile`.
+2. Установит зависимости из `package.json`.
+3. Запустит `bot.js` в режиме polling.
+4. В логах появится: `Bot starting in polling mode...`
+
+**Ожидаемый вывод:**
+```
+✓ Image tax_reminder_bot-bot Built
+✓ Container tax-reminder-bot Created
+tax-reminder-bot | Bot starting in polling mode...
+```
+
+### Проверка
+
+1. **Открой MAX**.
+2. **Найди бота** по нику.
+3. **Напиши `/start`**.
+4. **Проверь** — бот должен ответить.
+
+### Просмотр логов
+
+```bash
+docker-compose logs -f
+```
+
+**Что смотреть:**
+- `Bot starting in polling mode...` — бот запущен.
+- Ошибки `Error` или `Failed` — проблема.
+- `fetch failed` — сетевая проблема.
 
 ### Остановка
 
@@ -248,17 +310,51 @@ docker-compose up --build
 docker-compose down
 ```
 
-### Повторный запуск
+### Повторный запуск (без пересборки)
 
 ```bash
 docker-compose up
 ```
 
-### Важно
+### Пересборка после изменений кода
 
-- Docker-конфигурация подготовлена для **воспроизводимого запуска**. 
-- Основная версия бота работает через **Yandex Cloud Functions** (webhook + таймер). 
-- Docker — **альтернативный вариант** для локальной разработки и проверки.
+Если ты **изменил код** (`bot.js`, `data.js`):
+
+```bash
+docker-compose down
+docker-compose up --build
+```
+
+### Проверка статуса
+
+```bash
+docker-compose ps
+```
+
+**Что смотреть:**
+- **STATUS:** `Up` — контейнер работает.
+- **STATUS:** `Restarting` — контейнер падает (смотри логи).
+
+### Возможные проблемы
+
+**1. `Error: getaddrinfo EAI_AGAIN platform-api2.max.ru`**
+- Проблема с DNS в Docker.
+- **Решение:** добавь `network_mode: host` в `docker-compose.yml`.
+
+**2. `Error: unable to get local issuer certificate`**
+- Проблема с SSL-сертификатами.
+- **Решение:** убедись, что `NODE_TLS_REJECT_UNAUTHORIZED=0` **есть** в `.env` **и** в `docker-compose.yml` (`environment`).
+
+**3. `STATUS: Restarting`**
+- Контейнер завершается **сразу** после запуска.
+- **Причина:** `bot.js` завершается, вместо того чтобы **работать**.
+- **Решение:** убедись, что в `Dockerfile` — `CMD ["node", "bot.js"]`, и в `bot.js` есть `bot.start()`.
+
+**4. `injected env (0) from .env`**
+- `dotenv` **не находит** `.env`.
+- **Решение:** убедись, что `.env` **не в `.dockerignore`** и есть в корне проекта.
+
+>  **Docker** и **Yandex Cloud Functions** **не могут работать одновременно** с одним токеном — один будет блокировать другого. Нужно одно что-то выключить.
 
 ---
 
@@ -367,7 +463,7 @@ docker-compose up
 
 - **Автор:** Сайгафарова Карина  
 - **Хакатон:** Эффективный бизнес, 2026  
-- **Трек:** цифровые решения для бизнеса  
+- **Трек:** Эффективный бизнес
 
 ## Лицензия
 
