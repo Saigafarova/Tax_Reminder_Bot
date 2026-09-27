@@ -1,79 +1,196 @@
 import 'dotenv/config';
 import { Bot } from '@maxhub/max-bot-api';
-import { SITUATIONS } from './data.js';
+import { CATEGORIES, SITUATIONS } from './data.js';
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 
 const bot = new Bot(process.env.BOT_TOKEN);
 
-const users = {};
-function getUser(userId) {
+// ——— Object Storage ———
+const s3 = new S3Client({
+  region: process.env.S3_REGION || 'ru-central1',
+  endpoint: process.env.S3_ENDPOINT || 'https://storage.yandexcloud.net',
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  },
+  forcePathStyle: true,
+});
+
+const BUCKET = process.env.S3_BUCKET;
+const USERS_KEY = 'users.json';
+
+async function loadUsers() {
+  try {
+    const res = await s3.send(
+      new GetObjectCommand({ Bucket: BUCKET, Key: USERS_KEY })
+    );
+    const text = await res.Body.transformToString();
+    return JSON.parse(text);
+  } catch (err) {
+    if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+      return {};
+    }
+    console.error('loadUsers error:', err);
+    return {};
+  }
+}
+
+async function saveUsers(users) {
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: USERS_KEY,
+        Body: JSON.stringify(users),
+        ContentType: 'application/json',
+      })
+    );
+  } catch (err) {
+    console.error('saveUsers error:', err);
+  }
+}
+
+function ensureUser(users, userId) {
   if (!users[userId]) {
-    users[userId] = {
-      situations: [], 
-      reports: [],   
-      reminders: []   
-    };
+    users[userId] = { situations: [], reports: [], reminders: [] };
   }
   return users[userId];
 }
 
-bot.command('start', (ctx) => {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
-
-  if (user.situations.length > 0) {
-    return showMenu(ctx, userId);
-  }
+// ——— UI ———
+function showCategories(ctx) {
   return ctx.reply(
-    'Привет! Я помогаю ИП с сотрудниками на УСН с отчётностью.\n\n' +
-    'Что у вас изменилось?',
+    'Выберите раздел:\n\n' +
+      'Сроки и штрафы — типовые ориентиры. Перед сдачей сверьте в ЛК ФНС/СФР или с бухгалтером.',
     {
-      attachments: [{
+      attachments: [
+        {
+          type: 'inline_keyboard',
+          payload: {
+            buttons: [
+              ...CATEGORIES.map((c) => [
+                { type: 'callback', text: c.title, payload: `cat_${c.id}` },
+              ]),
+              [{ type: 'callback', text: 'Моя отчётность', payload: 'my_reports' }],
+              [{ type: 'callback', text: 'Мои напоминания', payload: 'my_reminders' }],
+            ],
+          },
+        },
+      ],
+    }
+  );
+}
+
+function showSituations(ctx, categoryId) {
+  const category = CATEGORIES.find((c) => c.id === categoryId);
+  const list = Object.entries(SITUATIONS).filter(
+    ([, s]) => s.categoryId === categoryId
+  );
+
+  if (list.length === 0) {
+    return ctx.reply('В этом разделе пока нет ситуаций.', {
+      attachments: [
+        {
+          type: 'inline_keyboard',
+          payload: {
+            buttons: [
+              [{ type: 'callback', text: '« К разделам', payload: 'choose_category' }],
+            ],
+          },
+        },
+      ],
+    });
+  }
+
+  const title = category ? category.title : 'Ситуации';
+
+  return ctx.reply(`Раздел: ${title}\n\nЧто у вас произошло?`, {
+    attachments: [
+      {
         type: 'inline_keyboard',
         payload: {
           buttons: [
-            [{ type: 'callback', text: 'Нанял сотрудника', payload: 'sit_hired' }],
-            [{ type: 'callback', text: 'Сменил режим', payload: 'sit_regime' }],
-            [{ type: 'callback', text: 'Купил транспорт', payload: 'sit_transport' }],
-            [{ type: 'callback', text: 'Ничего, проверить', payload: 'sit_none' }]
-          ]
-        }
-      }]
-    }
-  );
-});
+            ...list.map(([id, s]) => [
+              {
+                type: 'callback',
+                text: s.title.length > 60 ? s.title.slice(0, 57) + '...' : s.title,
+                payload: `sit_${id}`,
+              },
+            ]),
+            [{ type: 'callback', text: '« К разделам', payload: 'choose_category' }],
+          ],
+        },
+      },
+    ],
+  });
+}
 
-bot.action('sit_hired', (ctx) => addSituation(ctx, 'hired_first'));
-bot.action('sit_regime', (ctx) => addSituation(ctx, 'changed_regime'));
-bot.action('sit_transport', (ctx) => addSituation(ctx, 'bought_transport'));
-bot.action('sit_none', (ctx) => {
-  return ctx.reply(
-    'Хорошо! Если что-то изменится — возвращайтесь.\n\n' +
-    'А пока вот что обычно сдают ИП на УСН с сотрудниками:\n' +
-    '• ПСВ — до 25 числа каждого месяца\n' +
-    '• РСВ — до 25 числа после квартала\n' +
-    '• 6-НДФЛ — до 25 числа после квартала\n' +
-    '• ЕФС-1 — при приёме/увольнении\n\n' +
-    'Подробнее: https://мсп.рф/',
-    {
-      attachments: [{
+function showMainMenu(ctx) {
+  return ctx.reply('Что вам нужно?', {
+    attachments: [
+      {
         type: 'inline_keyboard',
         payload: {
-          buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
-        }
-      }]
-    }
-  );
-});
+          buttons: [
+            [{ type: 'callback', text: 'Добавить ситуацию', payload: 'choose_category' }],
+            [{ type: 'callback', text: 'Моя отчётность', payload: 'my_reports' }],
+            [{ type: 'callback', text: 'Мои напоминания', payload: 'my_reminders' }],
+            [{ type: 'callback', text: 'Сбросить данные', payload: 'reset_profile' }],
+          ],
+        },
+      },
+    ],
+  });
+}
 
+async function handleStart(ctx) {
+  const userId = String(ctx.user?.user_id);
+  if (!userId || userId === 'undefined') {
+    console.log('No user_id', ctx.update);
+    return;
+  }
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
+  if (user.situations && user.situations.length > 0) {
+    return showMainMenu(ctx);
+  }
+  return showCategories(ctx);
+}
 
-function addSituation(ctx, key) {
-  const userId = ctx.user.id;
+bot.command('start', handleStart);
+bot.on('bot_started', handleStart);
+
+async function addSituation(ctx, key) {
   const situation = SITUATIONS[key];
-  const user = getUser(userId);
+  if (!situation) {
+    return ctx.reply('Ситуация не найдена. Выберите раздел заново.', {
+      attachments: [
+        {
+          type: 'inline_keyboard',
+          payload: {
+            buttons: [
+              [{ type: 'callback', text: 'К разделам', payload: 'choose_category' }],
+            ],
+          },
+        },
+      ],
+    });
+  }
+
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
 
   if (!user.situations.includes(key)) {
     user.situations.push(key);
-    user.reports.push(...situation.reports.map(r => ({ ...r, status: 'not_done' })));
+    user.reports.push(
+      ...situation.reports.map((r) => ({ ...r, status: 'not_done' }))
+    );
+    await saveUsers(users);
   }
 
   let text = `📌 *${situation.title}*\n\n`;
@@ -88,46 +205,77 @@ function addSituation(ctx, key) {
 
   return ctx.reply(text, {
     parse_mode: 'Markdown',
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [
-          [{ type: 'callback', text: 'Отметить сдано', payload: 'mark_done' }],
-          [{ type: 'callback', text: 'Настроить напоминание', payload: 'set_reminder' }],
-          [{ type: 'callback', text: 'В меню', payload: 'menu' }]
-        ]
-      }
-    }]
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [
+            [{ type: 'callback', text: 'Отметить сдано', payload: 'mark_done' }],
+            [{ type: 'callback', text: 'Настроить напоминание', payload: 'set_reminder' }],
+            [{ type: 'callback', text: 'В меню', payload: 'menu' }],
+          ],
+        },
+      },
+    ],
   });
 }
 
-function showMenu(ctx, userId) {
-  return ctx.reply('Что вам нужно?', {
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [
-          [{ type: 'callback', text: 'Моя отчётность', payload: 'my_reports' }],
-          [{ type: 'callback', text: 'Мои напоминания', payload: 'my_reminders' }],
-          [{ type: 'callback', text: 'Изменить ситуацию', payload: 'change_sit' }]
-        ]
-      }
-    }]
+bot.action('reset_profile', async (ctx) => {
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  users[userId] = { situations: [], reports: [], reminders: [] };
+  await saveUsers(users);
+
+  return ctx.reply('Данные сброшены. Можно начать заново.', {
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [
+            [{ type: 'callback', text: 'Выбрать раздел', payload: 'choose_category' }],
+          ],
+        },
+      },
+    ],
   });
+});
+
+bot.action('choose_category', (ctx) => showCategories(ctx));
+bot.action('menu', (ctx) => showMainMenu(ctx));
+bot.action('change_sit', (ctx) => showCategories(ctx));
+
+bot.action('cat_hiring_and_onboarding', (ctx) =>
+  showSituations(ctx, 'hiring_and_onboarding')
+);
+bot.action('cat_regular_taxes_and_payments', (ctx) =>
+  showSituations(ctx, 'regular_taxes_and_payments')
+);
+bot.action('cat_social_cases_and_annuals', (ctx) =>
+  showSituations(ctx, 'social_cases_and_annuals')
+);
+bot.action('cat_offboarding_and_special', (ctx) =>
+  showSituations(ctx, 'offboarding_and_special')
+);
+
+for (const id of Object.keys(SITUATIONS)) {
+  bot.action(`sit_${id}`, (ctx) => addSituation(ctx, id));
 }
 
-bot.action('my_reports', (ctx) => {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
+bot.action('my_reports', async (ctx) => {
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
 
   if (!user.reports || user.reports.length === 0) {
     return ctx.reply('У вас пока нет отчётов. Выберите ситуацию в меню.', {
-      attachments: [{
-        type: 'inline_keyboard',
-        payload: {
-          buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
-        }
-      }]
+      attachments: [
+        {
+          type: 'inline_keyboard',
+          payload: {
+            buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]],
+          },
+        },
+      ],
     });
   }
 
@@ -139,138 +287,173 @@ bot.action('my_reports', (ctx) => {
 
   return ctx.reply(text, {
     parse_mode: 'Markdown',
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [
-          [{ type: 'callback', text: 'Отметить сдано', payload: 'mark_done' }],
-          [{ type: 'callback', text: 'Настроить напоминание', payload: 'set_reminder' }],
-          [{ type: 'callback', text: 'В меню', payload: 'menu' }]
-        ]
-      }
-    }]
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [
+            [{ type: 'callback', text: 'Отметить сдано', payload: 'mark_done' }],
+            [{ type: 'callback', text: 'Настроить напоминание', payload: 'set_reminder' }],
+            [{ type: 'callback', text: 'В меню', payload: 'menu' }],
+          ],
+        },
+      },
+    ],
   });
 });
 
-bot.action('mark_done', (ctx) => {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
+bot.action('mark_done', async (ctx) => {
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
 
   if (!user.reports || user.reports.length === 0) {
-    return ctx.reply('У вас нет отчётов для отметки.');
+    return ctx.reply('У вас нет отчётов для отметки. Начните с /start');
   }
 
   return ctx.reply('Какой отчёт сдали?', {
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: user.reports.map((r, i) => [
-          { type: 'callback', text: `${i + 1}. ${r.name}`, payload: `done_${r.id}` }
-        ])
-      }
-    }]
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: user.reports.map((r, i) => [
+            {
+              type: 'callback',
+              text: `${i + 1}. ${r.name}`,
+              payload: `done_${r.id}`,
+            },
+          ]),
+        },
+      },
+    ],
   });
 });
 
-bot.action('done_psv', (ctx) => markDone(ctx, 'psv'));
-bot.action('done_rsv', (ctx) => markDone(ctx, 'rsv'));
-bot.action('done_ndfl', (ctx) => markDone(ctx, 'ndfl'));
-bot.action('done_efs_kadry', (ctx) => markDone(ctx, 'efs_kadry'));
-bot.action('done_efs_vznosy', (ctx) => markDone(ctx, 'efs_vznosy'));
-bot.action('done_usn_notification', (ctx) => markDone(ctx, 'usn_notification'));
-bot.action('done_usn_declaration', (ctx) => markDone(ctx, 'usn_declaration'));
-bot.action('done_usn_advances', (ctx) => markDone(ctx, 'usn_advances'));
-bot.action('done_transport_tax_ip', (ctx) => markDone(ctx, 'transport_tax_ip'));
-
-function markDone(ctx, reportId) {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
-  const report = user.reports.find(r => r.id === reportId);
+async function markDone(ctx, reportId) {
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
+  const report = user.reports.find((r) => r.id === reportId);
 
   if (!report) {
-    return ctx.reply('Не нашёл такой отчёт.');
+    return ctx.reply('Не нашёл такой отчёт. Начните с /start');
   }
 
   report.status = 'done';
+  await saveUsers(users);
+
   return ctx.reply(`Записал: ${report.name} сдан.`, {
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
-      }
-    }]
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]],
+        },
+      },
+    ],
   });
 }
 
-bot.action('set_reminder', (ctx) => {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
+bot.action('set_reminder', async (ctx) => {
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
 
   if (!user.reports || user.reports.length === 0) {
-    return ctx.reply('У вас нет отчётов для напоминания.');
+    return ctx.reply(
+      'У вас нет отчётов для напоминания. Сначала выберите ситуацию (/start).',
+      {
+        attachments: [
+          {
+            type: 'inline_keyboard',
+            payload: {
+              buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]],
+            },
+          },
+        ],
+      }
+    );
   }
 
   return ctx.reply('По какому отчёту напомнить?', {
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: user.reports.map((r, i) => [
-          { type: 'callback', text: `${i + 1}. ${r.name}`, payload: `rem_${r.id}` }
-        ])
-      }
-    }]
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: user.reports.map((r, i) => [
+            {
+              type: 'callback',
+              text: `${i + 1}. ${r.name}`,
+              payload: `rem_${r.id}`,
+            },
+          ]),
+        },
+      },
+    ],
   });
 });
 
-bot.action('rem_psv', (ctx) => askDate(ctx, 'psv'));
-bot.action('rem_rsv', (ctx) => askDate(ctx, 'rsv'));
-bot.action('rem_ndfl', (ctx) => askDate(ctx, 'ndfl'));
-bot.action('rem_efs_kadry', (ctx) => askDate(ctx, 'efs_kadry'));
-bot.action('rem_efs_vznosy', (ctx) => askDate(ctx, 'efs_vznosy'));
-bot.action('rem_usn_notification', (ctx) => askDate(ctx, 'usn_notification'));
-bot.action('rem_usn_declaration', (ctx) => askDate(ctx, 'usn_declaration'));
-bot.action('rem_usn_advances', (ctx) => askDate(ctx, 'usn_advances'));
-bot.action('rem_transport_tax_ip', (ctx) => askDate(ctx, 'transport_tax_ip'));
+const allReportIds = [
+  ...new Set(
+    Object.values(SITUATIONS).flatMap((s) => s.reports.map((r) => r.id))
+  ),
+];
 
-function askDate(ctx, reportId) {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
-  const report = user.reports.find(r => r.id === reportId);
-  
+for (const reportId of allReportIds) {
+  bot.action(`done_${reportId}`, (ctx) => markDone(ctx, reportId));
+  bot.action(`rem_${reportId}`, (ctx) => askDate(ctx, reportId));
+}
+
+async function askDate(ctx, reportId) {
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
+  const report = user.reports.find((r) => r.id === reportId);
+
+  if (!report) {
+    return ctx.reply('Отчёт не найден. Начните заново с /start');
+  }
+
   user.waitingForDate = reportId;
-  
+  await saveUsers(users);
+
   return ctx.reply(
     `${report.name}\n\n` +
-    `Срок: ${report.deadline}\n\n` +
-    `Напишите дату, когда напомнить, в формате ДД.ММ.ГГГГ\n` +
-    `Например: 22.10.2026`
+      `Срок: ${report.deadline}\n\n` +
+      `Напишите дату, когда напомнить, в формате ДД.ММ.ГГГГ\n` +
+      `Например: 22.10.2026`
   );
 }
 
-bot.on('message_created', (ctx) => {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
-  
+bot.on('message_created', async (ctx) => {
+  const userId = String(ctx.user?.user_id);
+  if (!userId || userId === 'undefined') return;
+
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
+
   if (!user.waitingForDate) return;
-  
-  const text = ctx.message.body.text;
+
+  const text = ctx.message?.body?.text;
+  if (!text || text.startsWith('/')) return;
+
   const reportId = user.waitingForDate;
-  
   const dateRegex = /^(\d{2})\.(\d{2})\.(\d{4})$/;
   const match = text.match(dateRegex);
-  
+
   if (!match) {
-    return ctx.reply('Не понял дату. Напишите в формате ДД.ММ.ГГГГ, например: 22.10.2026');
+    return ctx.reply(
+      'Не понял дату. Напишите в формате ДД.ММ.ГГГГ, например: 22.10.2026'
+    );
   }
-  
-  const day = parseInt(match[1]);
-  const month = parseInt(match[2]);
-  const year = parseInt(match[3]);
+
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
 
   if (month < 1 || month > 12) {
     return ctx.reply('Неверный месяц. Месяц должен быть от 01 до 12.');
   }
-
   if (day < 1 || day > 31) {
     return ctx.reply('Неверный день. День должен быть от 01 до 31.');
   }
@@ -291,118 +474,71 @@ bot.on('message_created', (ctx) => {
   }
 
   const remindDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  
 
   if (!user.reminders) user.reminders = [];
   user.reminders.push({ reportId, remindDate });
   user.waitingForDate = null;
-  
-  const report = user.reports.find(r => r.id === reportId);
-  
-  return ctx.reply(`Сохранено! Напомню ${match[1]}.${match[2]}.${match[3]} по отчёту "${report.name}".`, {
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
-      }
-    }]
-  });
+  await saveUsers(users);
+
+  const report = user.reports.find((r) => r.id === reportId);
+
+  return ctx.reply(
+    `Сохранено! Напомню ${match[1]}.${match[2]}.${match[3]} по отчёту "${report?.name || reportId}".`,
+    {
+      attachments: [
+        {
+          type: 'inline_keyboard',
+          payload: {
+            buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]],
+          },
+        },
+      ],
+    }
+  );
 });
 
-
-
-function saveReminder(ctx, reportId, days) {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
-
-  const report = user.reports.find(r => r.id === reportId);
-  if (!report) {
-    return ctx.reply('Не нашёл такой отчёт. Попробуйте снова.');
-  }
-
-  if (!user.reminders) user.reminders = [];
-
-  const isExist = user.reminders.some(r => r.reportId === reportId && r.days === days);
-  if (!isExist) {
-    user.reminders.push({ reportId, days });
-  }
-
-  return ctx.reply(`Сохранено! Напомню за ${days} дн. по отчёту "${report.name}".`, {
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
-      }
-    }]
-  });
-}
-
-bot.action('my_reminders', (ctx) => {
-  const userId = ctx.user.id;
-  const user = getUser(userId);
+bot.action('my_reminders', async (ctx) => {
+  const userId = String(ctx.user.user_id);
+  const users = await loadUsers();
+  const user = ensureUser(users, userId);
 
   if (!user.reminders || user.reminders.length === 0) {
     return ctx.reply('У вас пока нет напоминаний.', {
-      attachments: [{
-        type: 'inline_keyboard',
-        payload: {
-          buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
-        }
-      }]
+      attachments: [
+        {
+          type: 'inline_keyboard',
+          payload: {
+            buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]],
+          },
+        },
+      ],
     });
   }
 
   let text = '*Ваши напоминания:*\n\n';
-user.reminders.forEach((rem, i) => {
-  const report = user.reports.find(r => r.id === rem.reportId);
-  text += `${i + 1}. ${report?.name || 'Отчёт'} — ${rem.remindDate}\n`;
-});
-
-async function checkReminders() {
-  const today = new Date().toISOString().split('T')[0];
-  
-  for (const userId in users) {
-    const user = users[userId];
-    if (!user.reminders) continue;
-    
-    for (const rem of user.reminders) {
-      if (rem.remindDate === today) {
-        const report = user.reports.find(r => r.id === rem.reportId);
-        // отправка сообщения
-        // await bot.api.sendMessage({ user_id: userId, text: `Напоминание: ${report.name}` });
-      }
-    }
-  }
-}
-
-setInterval(checkReminders, 24 * 60 * 60 * 1000);
+  user.reminders.forEach((rem, i) => {
+    const report = user.reports.find((r) => r.id === rem.reportId);
+    text += `${i + 1}. ${report?.name || 'Отчёт'} — ${rem.remindDate}\n`;
+  });
 
   return ctx.reply(text, {
     parse_mode: 'Markdown',
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]]
-      }
-    }]
+    attachments: [
+      {
+        type: 'inline_keyboard',
+        payload: {
+          buttons: [[{ type: 'callback', text: 'В меню', payload: 'menu' }]],
+        },
+      },
+    ],
   });
 });
 
-bot.action('change_sit', (ctx) => {
-  return ctx.reply('Что у вас изменилось?', {
-    attachments: [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [
-          [{ type: 'callback', text: 'Нанял сотрудника', payload: 'sit_hired' }],
-          [{ type: 'callback', text: 'Сменил режим', payload: 'sit_regime' }],
-          [{ type: 'callback', text: 'Купил транспорт', payload: 'sit_transport' }],
-          [{ type: 'callback', text: 'В меню', payload: 'menu' }]
-        ]
-      }
-    }]
-  });
+//  Запуск для Docker 
+console.log('Bot starting in polling mode...');
+bot.start({ mode: 'polling' }).then(() => {
+  console.log('Bot is running (polling). Send /start in MAX.');
+}).catch((err) => {
+  console.error('Failed to start bot:', err);
+  process.exit(1);
 });
-bot.action('menu', (ctx) => showMenu(ctx, ctx.user.id));
-bot.start();
-console.log('Бот запущен...');
