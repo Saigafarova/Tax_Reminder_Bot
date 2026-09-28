@@ -8,13 +8,6 @@ import {
 } from '@aws-sdk/client-s3';
 import { validateDate, formatDateISO } from './validators.js';
 
-const validation = validateDate(text);
-
-if (!validation.valid) {
-  return ctx.reply(validation.error);
-}
-
-const remindDate = formatDateISO(day, month, year);
 const bot = new Bot(process.env.BOT_TOKEN);
 
 // ——— Object Storage ———
@@ -450,6 +443,13 @@ bot.on('message_created', async (ctx) => {
   if (text.startsWith('/')) return;
 
   const reportId = user.waitingForDate;
+  const validation = validateDate(text);
+
+if (!validation.valid) {
+  return ctx.reply(validation.error);
+}
+
+const remindDate = formatDateISO(day, month, year);
   const dateRegex = /^(\d{2})\.(\d{2})\.(\d{4})$/;
   const match = text.match(dateRegex);
 
