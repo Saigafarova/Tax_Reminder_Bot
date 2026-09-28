@@ -445,7 +445,7 @@ bot.on('message_created', async (ctx) => {
   const reportId = user.waitingForDate;
   const validation = validateDate(text);
 
-if (!validation.valid) {
+  if (!validation.valid) {
   return ctx.reply(validation.error);
 }
 
