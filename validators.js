@@ -1,5 +1,4 @@
 export function validateDate(text) {
-
   const dateRegex = /^(\d{2})\.(\d{2})\.(\d{4})$/;
   const match = text.match(dateRegex);
 
@@ -15,11 +14,9 @@ export function validateDate(text) {
     return { valid: false, error: 'Неверный месяц. Месяц должен быть от 01 до 12' };
   }
 
-
   if (day < 1 || day > 31) {
     return { valid: false, error: 'Неверный день. День должен быть от 01 до 31' };
   }
-
 
   const testDate = new Date(year, month - 1, day);
   if (
@@ -30,14 +27,13 @@ export function validateDate(text) {
     return { valid: false, error: 'Такой даты не существует' };
   }
 
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   if (testDate < today) {
     return { valid: false, error: 'Дата уже прошла' };
   }
 
-  return { valid: true, date: testDate };
+  return { valid: true, date: testDate, day, month, year };
 }
 
 export function formatDateISO(day, month, year) {
