@@ -6,7 +6,15 @@ import {
   GetObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
+import { validateDate, formatDateISO } from './validators.js';
 
+const validation = validateDate(text);
+
+if (!validation.valid) {
+  return ctx.reply(validation.error);
+}
+
+const remindDate = formatDateISO(day, month, year);
 const bot = new Bot(process.env.BOT_TOKEN);
 
 // ——— Object Storage ———
@@ -174,7 +182,7 @@ async function addSituation(ctx, key) {
   }
 
   let text = `📌 *${situation.title}*\n\n`;
-  text += `*Какие отчёты появились:*\n\n`;
+  text += `**Какие отчёты появились:**\n\n`;
 
   situation.reports.forEach((r, i) => {
     text += `${i + 1}. *${r.name}*\n`;
@@ -278,7 +286,7 @@ bot.action('my_reports', async (ctx) => {
     });
   }
 
-  let text = '*Ваши отчёты:*\n\n';
+  let text = '**Ваши отчёты:**\n\n';
   user.reports.forEach((r, i) => {
     const status = r.status === 'done' ? 'сдано' : 'не сдано';
     text += `${i + 1}. ${r.name} — ${r.deadline} — ${status}\n`;
@@ -519,7 +527,7 @@ bot.action('my_reminders', async (ctx) => {
     });
   }
 
-  let text = '*Ваши напоминания:*\n\n';
+  let text = '**Ваши напоминания:**\n\n';
   user.reminders.forEach((rem, i) => {
     const report = user.reports.find((r) => r.id === rem.reportId);
     text += `${i + 1}. ${report?.name || 'Отчёт'} — ${rem.remindDate}\n`;
