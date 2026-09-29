@@ -463,7 +463,7 @@ const remindDate = formatDateISO(day, month, year);
   const report = user.reports.find((r) => r.id === reportId);
 
   return ctx.reply(
-    `Сохранено! Напомню ${match[1]}.${match[2]}.${match[3]} по отчёту "${report?.name || reportId}".`,
+  `Сохранено! Напомню ${day}.${month}.${year} по отчёту "${report?.name || reportId}".`,
     {
       attachments: [
         {
