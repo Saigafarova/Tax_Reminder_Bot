@@ -32,7 +32,7 @@ async function loadUsers() {
     const text = await res.Body.transformToString();
     return JSON.parse(text);
   } catch (err) {
-    // Файл ещё не создан
+    
     if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
       return {};
     }
