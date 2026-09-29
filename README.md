@@ -59,11 +59,12 @@
 Tax_Reminder_Bot/
 ├── index.js              # Основной бот (webhook, Cloud Functions)
 ├── data.js               # Категории, ситуации, отчёты
+├── validators.js         # Валидация даты
 ├── package.json
-├── reminders/            # Job автонапоминаний
+├── reminders/            # Автонапоминания
 │   ├── index.js
 │   └── package.json
-├── bot.js                # для локальной разработки
+├── bot.js                # Для запуска в Docker
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
@@ -178,9 +179,8 @@ flowchart LR
 
 ## Запуск через Docker
 
-Docker-конфигурация позволяет запустить бота **локально** для проверки и разработки.
-
-> **Важно:** основной бот работает через **Yandex Cloud Functions** (webhook + timer). Docker — **альтернативный вариант** для локального тестирования.
+Dockerfile запускает bot.js — локальную версию для тестирования. 
+Основной бот работает через index.js в Yandex Cloud Functions (webhook + timer). Docker — **альтернативный вариант** для локального тестирования.
 
 ### Требования
 
@@ -362,10 +362,12 @@ docker-compose ps
 
 ### Основной бот
 
-1. Собрать ZIP из корня: `index.js`, `data.js`, `package.json`, `node_modules`.
-2. Cloud Functions → runtime **nodejs22**, точка входа **`index.handler`**.
-3. Включить **публичную функцию**, прописать env.
-4. Зарегистрировать webhook в MAX на URL функции  
+1. Собрать ZIP из корня: `index.js`, `data.js`, `validators.js`, `package.json`, `package-lock.json`.
+2. Загрузить в Object Storage.
+3. В Cloud Functions → Создать версию → Загрузить из S3.
+4.  Cloud Functions → runtime **nodejs22**, точка входа **`index.handler`**.
+5. Включить **публичную функцию**, прописать env.
+6. Зарегистрировать webhook в MAX на URL функции  
    (`POST /subscriptions` с `update_types`: `message_created`, `bot_started`, `message_callback`).
 
 ### Автонапоминания
@@ -410,6 +412,11 @@ docker-compose ps
   }
 }
 ```
+
+---
+
+## Тесты
+ npm test
 
 ---
 
@@ -462,7 +469,7 @@ docker-compose ps
 ## Команда
 
 - **Автор:** Сайгафарова Карина  
-- **Хакатон:** Эффективный бизнес, 2026  
+- **Хакатон:** Разработка чат-бота или мини-приложения для сервиса MAX, 2026  
 - **Трек:** Эффективный бизнес
 
 ## Лицензия
@@ -471,4 +478,3 @@ MIT
 
 **Версия:** MVP 1.1  
 **Актуальность данных:** сентябрь 2026  
-```
