@@ -406,7 +406,7 @@ docker-compose ps
       { "id": "efs_hire", "name": "...", "status": "not_done", "deadline": "...", "documents": [], "penalty": "..." }
     ],
     "reminders": [
-      { "reportId": "efs_hire", "remindDate": "2026-10-22", "sent": false }
+      { "reportId": "efs_hire", "remindDate": "2026-10-22" }
     ],
     "waitingForDate": null
   }
