@@ -175,10 +175,10 @@ async function addSituation(ctx, key) {
   }
 
   let text = `📌 *${situation.title}*\n\n`;
-  text += `**Какие отчёты появились:**\n\n`;
+  text += `Какие отчёты появились:\n\n`;
 
   situation.reports.forEach((r, i) => {
-    text += `${i + 1}. *${r.name}*\n`;
+    text += `${i + 1}. ${r.name}\n`;
     text += `${r.deadline}\n`;
     text += `Что нужно: ${r.documents.join(', ')}\n`;
     text += `Если не сдать: ${r.penalty}\n\n`;
@@ -279,7 +279,7 @@ bot.action('my_reports', async (ctx) => {
     });
   }
 
-  let text = '**Ваши отчёты:**\n\n';
+  let text = 'Ваши отчёты:\n\n';
   user.reports.forEach((r, i) => {
     const status = r.status === 'done' ? 'сдано' : 'не сдано';
     text += `${i + 1}. ${r.name} — ${r.deadline} — ${status}\n`;
@@ -495,7 +495,7 @@ bot.action('my_reminders', async (ctx) => {
     });
   }
 
-  let text = '**Ваши напоминания:**\n\n';
+  let text = 'Ваши напоминания:\n\n';
   user.reminders.forEach((rem, i) => {
     const report = user.reports.find((r) => r.id === rem.reportId);
     text += `${i + 1}. ${report?.name || 'Отчёт'} — ${rem.remindDate}\n`;
